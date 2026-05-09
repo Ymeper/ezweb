@@ -1,0 +1,85 @@
+FastHTML - Vendor Copy
+Copyright 2024 AnswerDotAI (Answer.AI)
+
+This product includes software developed by AnswerDotAI (Answer.AI):
+  https://github.com/AnswerDotAI/fasthtml
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use the files in this directory except in compliance with the License.
+You may obtain a copy of the License at:
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+Modifications
+
+This is a modified (derivative) copy of a subset of the original FastHTML
+library. The following changes have been made:
+
+1. Server/Routing Components Removed (core.py):
+   - FastHTML class (Starlette subclass) and all @patch methods removed
+   - serve() function (uvicorn launcher) removed
+   - APIRouter, RouteFuncs, HostRoute removed
+   - Beforeware, Lifespan middleware removed
+   - WebSocket support (_ws_endp, setup_ws, _send_ws, _wrap_ws) removed
+   - Client (httpx test client) removed
+   - StringConvertor patches, reg_re_param, StaticNoCache removed
+   - add_sig_param, into, MiddlewareBase decorators removed
+   - _wrap_call, _wrap_ex, _endp dispatching removed
+   - signal_shutdown() removed
+   - devtools_json removed
+
+2. Server-dependent functions removed from xtend.py:
+   - with_sid() (requires app routes)
+   - robots_txt() (requires app routes)
+   - sitemap_xml() / sitemap_url() (requires app routes)
+
+3. Non-essential builders removed from xtend.py:
+   - Socials() — OG/Twitter social card meta tags
+   - YouTubeEmbed() — YouTube iframe embed
+
+4. New Files Created (not part of original FastHTML):
+   - starlette.py — minimal re-export shim for Starlette types
+   - components.py — minimal ft_html/ft_hx + HTML tag factories
+   - NOTICE — this file
+
+5. Imports Cleaned (all files):
+   - All `from xxx import *` wildcard imports replaced with explicit imports
+   - common.py: removed imports of non-existent submodules
+     (.starlette, .basics, .pico, .authmw, .live_reload, .toaster, .js, .fastapp)
+   - core.py: removed unused imports (asyncio, contextlib, uvicorn, httpx,
+     itsdangerous, fastcore.style, functools, anyio); added missing `import re`
+   - xtend.py: removed unused imports (dataclass, asdict)
+
+6. Type Annotations Fixed (all files):
+   - Optional-call assertions added
+   - `# type: ignore` annotations for Pylance false-positives
+   - Return types corrected (Union, tuple, etc.)
+   - Dynamic HTML tag generation block suppressed with pyright directive
+   - LdJson return type widened to Union[FT, dict]
+
+Files retained (modified):
+  - common.py     — re-export facade
+  - core.py       — HTML generation utilities (FT components, HTMX headers, form
+                    parsing, response building, url helpers, cookies)
+  - components.py — Minimal ft_html/ft_hx + all HTML tag factories
+  - xtend.py      — HTML component builders (A, Form, Script, Style,
+                    JSON-LD structured data, surreal.js helpers, etc.)
+  - starlette.py  — Starlette type re-export shim
+
+Files removed (vs original FastHTML):
+  - All server/routing/middleware/websocket modules
+  - live_reload.py, toaster.py, js.py, fastapp.py, authmw.py, pico.py, basics.py
+  - IPython notebook sources
+
+Purpose:
+  This vendored copy is used solely for the HTML generation and component-building
+  capabilities provided by the FT (FastTag) system. All server-side functionality
+  (routing, middleware, websocket, lifespan, etc.) has been excised as it is
+  handled by the ezweb framework's own server layer.

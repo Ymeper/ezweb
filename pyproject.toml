@@ -1,0 +1,20 @@
+[project]
+name = "ezweb"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Ymeper", email = "1447998829@qq.com" }
+]
+requires-python = ">=3.12.12"
+dependencies = [
+    "fastapi>=0.136.1",
+    "fastcore>=1.7.0",
+    "python-dateutil>=2.8.0",
+    "starlette>=1.0.0",
+    "uvicorn>=0.46.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.5,<0.11.0"]
+build-backend = "uv_build"
