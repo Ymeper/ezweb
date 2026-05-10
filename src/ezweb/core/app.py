@@ -15,6 +15,22 @@ from .page import Page
 
 logger = logging.getLogger(__name__)
 
+
+def _uvicorn_delegate(self, record):
+    logger.handle(record)
+    if logger.level == logging.NOTSET or record.levelno >= logger.level:
+        self._delegate_original(record)
+
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_logger.handlers.clear()
+object.__setattr__(uvicorn_logger, "_delegate_original", uvicorn_logger.handle)
+uvicorn_logger.handle = _uvicorn_delegate.__get__(uvicorn_logger, type(uvicorn_logger))  # type: ignore[method-assign]
+
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.handlers.clear()
+object.__setattr__(uvicorn_access_logger, "_delegate_original", uvicorn_access_logger.handle)
+uvicorn_access_logger.handle = _uvicorn_delegate.__get__(uvicorn_access_logger, type(uvicorn_access_logger))  # type: ignore[method-assign]
+
 # Set up Jinja2 environment for template rendering
 _templates_dir = Path(__file__).resolve().parent.parent / "templates"
 env = Environment(
@@ -59,7 +75,7 @@ class PageRoute:
 
 class App:
     def __init__(self, logger: Optional[logging.Logger] = logger):
-        self._mode: Literal["decoupled", "Monolithic"] = "decoupled"
+        self._mode: Literal["decoupled", "monolithic"] = "decoupled"
         self._pages: List[PageRoute] = []
         self._logger = logger
         self._app = Starlette(
@@ -94,11 +110,12 @@ class App:
                 self._log(
                     logging.INFO, f"{client_host} -> {route.path} -> {route.name}"
                 )
+                page_html = route.page.html
                 html_content = (
-                    "".join(route.page.html)
-                    if hasattr(route.page.html, "__iter__")
-                    and not isinstance(route.page.html, str)
-                    else route.page.html
+                    "".join(page_html)
+                    if hasattr(page_html, "__iter__")
+                    and not isinstance(page_html, str)
+                    else page_html
                 )
                 return HTMLResponse(content=html_content)
             else:
@@ -125,14 +142,14 @@ class App:
     def pages(self) -> List[PageRoute]:
         return self._pages
 
-    def set_mode(self, mode: Literal["decoupled", "Monolithic"]):
-        if mode not in ["decoupled", "Monolithic"]:
-            raise ValueError("Invalid mode. Mode must be 'decoupled' or 'Monolithic'.")
+    def set_mode(self, mode: Literal["decoupled", "monolithic"]):
+        if mode not in ["decoupled", "monolithic"]:
+            raise ValueError("Invalid mode. Mode must be 'decoupled' or 'monolithic'.")
         self._mode = mode
         return self._mode
 
     @property
-    def mode(self) -> Literal["decoupled", "Monolithic"]:
+    def mode(self) -> Literal["decoupled", "monolithic"]:
         return self._mode
 
     def run(self, host: str = "127.0.0.1", port: int = 8000):
@@ -141,7 +158,7 @@ class App:
             self._app,
             host=host,
             port=port,
-            log_level="critical",
+            log_level="error",
             access_log=False,
             server_header=False,
         )

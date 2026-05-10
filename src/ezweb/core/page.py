@@ -6,10 +6,14 @@ Provides :class:`Page` to define page structures declaratively and render them a
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
-from ..vendor.fasthtml.components import H1, H2, H3, H4, H5, H6, Footer, P
+from ..vendor.fasthtml.components import H1, H2, H3, H4, H5, H6, Footer, P  # type: ignore[attr-defined]
 from ..vendor.fasthtml.core import Html, to_xml
+from .script import ScriptInterpreter
+
+logger = logging.getLogger("ezweb.core.app")
 
 __all__ = ["Page"]
 
@@ -143,16 +147,67 @@ def _validate_sub_value(
             )
         return
 
-    if not isinstance(value, str):
+    if isinstance(value, str):
+        return
+
+    if isinstance(value, dict) and "type" in value and "data" in value:
+        _validate_content_dict(key, value, element)
+        return
+
+    raise ValueError(
+        f"Sub-element {key!r} in {element!r} must be a string, "
+        f"or a dict with 'type' and 'data' keys, "
+        f"got {type(value).__name__}"
+    )
+
+
+def _validate_content_dict(key: str, value: dict[str, Any], element: str) -> None:
+    content_type = value.get("type")
+    if content_type not in ("string", "script"):
         raise ValueError(
-            f"Sub-element {key!r} in {element!r} must be a string, "
-            f"got {type(value).__name__}"
+            f"Sub-element {key!r} in {element!r} has invalid 'type' {content_type!r}. "
+            f"Must be 'string' or 'script'"
         )
+    data = value.get("data")
+    if content_type == "string":
+        if not isinstance(data, str):
+            raise ValueError(
+                f"Sub-element {key!r} in {element!r} with type 'string' "
+                f"requires 'data' to be a string, got {type(data).__name__}"
+            )
+    elif content_type == "script":
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Sub-element {key!r} in {element!r} with type 'script' "
+                f"requires 'data' to be a dict, got {type(data).__name__}"
+            )
+
+
+def _resolve_content(content: Any) -> str:
+    """Resolve content from a string or content-dict to a final string."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, dict):
+        return str(content)
+    content_type = content.get("type")
+    if content_type == "string":
+        return content.get("data", "")
+    if content_type == "script":
+        interpreter = ScriptInterpreter()
+        try:
+            result = interpreter.execute(content["data"])
+        except Exception as e:
+            logger.error("Script execution failed: %s", e)
+            return ""
+        return str(result) if result is not None else ""
+    return ""
 
 
 def _render_element(key: str, value: dict[str, Any]):
     config = _ELEMENTS[key]
     if config.get("content", {}).get("mode") == "level":
-        return config["format"][value["level"]](value["content"])
+        resolved = _resolve_content(value.get("content", ""))
+        return config["format"][value["level"]](resolved)
     content = value.pop("content", "")
-    return config["format"](content, **value)
+    resolved = _resolve_content(content)
+    return config["format"](resolved, **value)
