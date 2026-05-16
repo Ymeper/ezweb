@@ -65,16 +65,36 @@ def _is_command_dict(value: dict[str, Any], command_keys: frozenset[str]) -> boo
 class ScriptInterpreter:
     """Executes ezweb DSL scripts for dynamic content generation."""
 
-    _COMMAND_KEYS = frozenset({
-        "read_file", "write_file", "delete_file", "file_exists",
-        "variable",
-        "json_analyze", "json_stringify",
-        "return",
-        "concat", "replace", "split", "join", "trim", "upper", "lower",
-        "slice", "length", "at",
-        "add", "sub", "mul", "div", "mod",
-        "format", "timestamp", "if",
-    })
+    _COMMAND_KEYS = frozenset(
+        {
+            "read_file",
+            "write_file",
+            "delete_file",
+            "file_exists",
+            "variable",
+            "json_analyze",
+            "json_stringify",
+            "return",
+            "concat",
+            "replace",
+            "split",
+            "join",
+            "trim",
+            "upper",
+            "lower",
+            "slice",
+            "length",
+            "at",
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "mod",
+            "format",
+            "timestamp",
+            "if",
+        }
+    )
 
     def __init__(self, base_path: str | Path | None = None) -> None:
         self._variables: dict[str, Any] = {}
@@ -90,7 +110,9 @@ class ScriptInterpreter:
     def execute(self, script_data: dict[str, Any]) -> Any:
         """Execute a script and return the result."""
         if not isinstance(script_data, dict):
-            raise ScriptError(f"Script must be a dict, got {type(script_data).__name__}")
+            raise ScriptError(
+                f"Script must be a dict, got {type(script_data).__name__}"
+            )
 
         result = None
         for key in list(script_data.keys()):
@@ -132,31 +154,31 @@ class ScriptInterpreter:
     def _dispatch(self, cmd: str, action: Any) -> Any:
         """Route a command name to its implementation."""
         _dispatch_map = {
-            "variable":       self._do_variable,
-            "read_file":      self._do_read_file,
-            "write_file":     self._do_write_file,
-            "delete_file":    self._do_delete_file,
-            "file_exists":    self._do_file_exists,
-            "json_analyze":   self._do_json_analyze,
+            "variable": self._do_variable,
+            "read_file": self._do_read_file,
+            "write_file": self._do_write_file,
+            "delete_file": self._do_delete_file,
+            "file_exists": self._do_file_exists,
+            "json_analyze": self._do_json_analyze,
             "json_stringify": self._do_json_stringify,
-            "concat":  self._do_concat,
+            "concat": self._do_concat,
             "replace": self._do_replace,
-            "split":   self._do_split,
-            "join":    self._do_join,
-            "trim":    self._do_trim,
-            "upper":   self._do_upper,
-            "lower":   self._do_lower,
-            "slice":  self._do_slice,
+            "split": self._do_split,
+            "join": self._do_join,
+            "trim": self._do_trim,
+            "upper": self._do_upper,
+            "lower": self._do_lower,
+            "slice": self._do_slice,
             "length": self._do_length,
-            "at":     self._do_at,
+            "at": self._do_at,
             "add": self._do_add,
             "sub": self._do_sub,
             "mul": self._do_mul,
             "div": self._do_div,
             "mod": self._do_mod,
-            "format":    self._do_format,
+            "format": self._do_format,
             "timestamp": self._do_timestamp,
-            "if":        self._do_if,
+            "if": self._do_if,
         }
 
         if cmd == "variable":
@@ -175,7 +197,7 @@ class ScriptInterpreter:
         finally:
             if ok:
                 self._path.pop()
-    
+
     # Helper: optional save
 
     def _maybe_save(self, action: dict[str, Any], value: Any) -> None:
@@ -185,7 +207,9 @@ class ScriptInterpreter:
                 raise ScriptError("'save' must be a dict like {'variable': 'name'}")
             var_name = save["variable"]
             if not isinstance(var_name, str):
-                raise ScriptError(f"Variable name must be a string, got {type(var_name).__name__}")
+                raise ScriptError(
+                    f"Variable name must be a string, got {type(var_name).__name__}"
+                )
             self._variables[var_name] = value
 
     @staticmethod
@@ -199,7 +223,7 @@ class ScriptInterpreter:
         if not isinstance(value, (int, float)):
             raise ScriptError(f"{label} must be a number, got {type(value).__name__}")
         return value
-    
+
     # File operations
 
     def _resolve_path(self, file_ref: Any) -> Path:
@@ -211,9 +235,14 @@ class ScriptInterpreter:
         try:
             content = full_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            raise ScriptError(f"File not found: {full_path}", detail={"file": str(action.get("file"))})
+            raise ScriptError(
+                f"File not found: {full_path}", detail={"file": str(action.get("file"))}
+            )
         except OSError as e:
-            raise ScriptError(f"Failed to read '{full_path}': {e}", detail={"file": str(action.get("file"))})
+            raise ScriptError(
+                f"Failed to read '{full_path}': {e}",
+                detail={"file": str(action.get("file"))},
+            )
         self._maybe_save(action, content)
         return content
 
@@ -225,7 +254,10 @@ class ScriptInterpreter:
         try:
             full_path.write_text(str(content), encoding="utf-8")
         except OSError as e:
-            raise ScriptError(f"Failed to write '{full_path}': {e}", detail={"file": str(action.get("file"))})
+            raise ScriptError(
+                f"Failed to write '{full_path}': {e}",
+                detail={"file": str(action.get("file"))},
+            )
         result = {"file": str(full_path), "written": True}
         self._maybe_save(action, result)
         return result
@@ -253,12 +285,16 @@ class ScriptInterpreter:
     def _do_variable(self, action: dict[str, Any]) -> Any:
         var_name = action.get("variable")
         if var_name is None:
-            raise ScriptError("'variable' requires a 'variable' key with the variable name")
+            raise ScriptError(
+                "'variable' requires a 'variable' key with the variable name"
+            )
         var_name = self._require_str(var_name, "Variable name")
         if var_name not in self._variables:
-            raise ScriptError(f"Variable '{var_name}' is not defined", detail={"variable": var_name})
+            raise ScriptError(
+                f"Variable '{var_name}' is not defined", detail={"variable": var_name}
+            )
         return self._variables[var_name]
-    
+
     # JSON operations
 
     def _do_json_analyze(self, action: dict[str, Any]) -> Any:
@@ -285,7 +321,9 @@ class ScriptInterpreter:
             )
 
         if key not in parsed:
-            raise ScriptError(f"Key '{key}' not found in JSON data", detail={"key": key})
+            raise ScriptError(
+                f"Key '{key}' not found in JSON data", detail={"key": key}
+            )
         result = parsed[key]
         self._maybe_save(action, result)
         return result
@@ -298,7 +336,7 @@ class ScriptInterpreter:
         result = json.dumps(self._eval(data), indent=indent, ensure_ascii=False)
         self._maybe_save(action, result)
         return result
-    
+
     # String operations
 
     def _do_concat(self, action: dict[str, Any]) -> str:
@@ -366,14 +404,18 @@ class ScriptInterpreter:
         elif isinstance(seq, list):
             result = seq[start:end:step]
         else:
-            raise ScriptError(f"'slice' requires a string or list, got {type(seq).__name__}")
+            raise ScriptError(
+                f"'slice' requires a string or list, got {type(seq).__name__}"
+            )
         self._maybe_save(action, result)
         return result
 
     def _do_length(self, action: dict[str, Any]) -> int:
         data = self._eval(action.get("data"))
         if not isinstance(data, (str, list, dict)):
-            raise ScriptError(f"'length' requires a string, list, or dict, got {type(data).__name__}")
+            raise ScriptError(
+                f"'length' requires a string, list, or dict, got {type(data).__name__}"
+            )
         result = len(data)
         self._maybe_save(action, result)
         return result
@@ -386,11 +428,15 @@ class ScriptInterpreter:
         if not isinstance(index, int):
             raise ScriptError(f"'index' must be an integer, got {type(index).__name__}")
         if not isinstance(data, (str, list)):
-            raise ScriptError(f"'at' requires a string or list, got {type(data).__name__}")
+            raise ScriptError(
+                f"'at' requires a string or list, got {type(data).__name__}"
+            )
         try:
             result = data[index]
         except IndexError:
-            raise ScriptError(f"Index {index} out of range for data of length {len(data)}")
+            raise ScriptError(
+                f"Index {index} out of range for data of length {len(data)}"
+            )
         self._maybe_save(action, result)
         return result
 
@@ -431,7 +477,9 @@ class ScriptInterpreter:
         if isinstance(data, dict):
             data = {k: self._eval(v) for k, v in data.items()}
         if not isinstance(data, dict):
-            raise ScriptError(f"'format' 'data' must resolve to a dict, got {type(data).__name__}")
+            raise ScriptError(
+                f"'format' 'data' must resolve to a dict, got {type(data).__name__}"
+            )
         try:
             result = template.format_map(data)
         except KeyError as e:
@@ -447,6 +495,7 @@ class ScriptInterpreter:
             tz = timezone.utc
             if tz_offset is not None:
                 from datetime import timedelta
+
                 tz = timezone(timedelta(hours=float(tz_offset)))
             result = datetime.now(tz=tz).strftime(fmt)
         else:

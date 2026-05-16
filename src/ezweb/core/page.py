@@ -92,7 +92,10 @@ class Page:
     def html(self) -> str:
         """Return the page rendered as an HTML string."""
         name = self._name or "?"
-        children = [_render_element(key, value.copy(), name) for key, value in self.structure.items()]
+        children = [
+            _render_element(key, value.copy(), name)
+            for key, value in self.structure.items()
+        ]
         return to_xml(Html(*children), indent=False)
 
     def __repr__(self) -> str:
@@ -112,9 +115,7 @@ class Page:
     @staticmethod
     def _validate_element_key(key: str) -> None:
         if key not in _ELEMENTS:
-            raise ValueError(
-                f"Invalid element {key!r}."
-            )
+            raise ValueError(f"Invalid element {key!r}.")
 
     @staticmethod
     def _validate_element_content(key: str, value: dict[str, Any]) -> None:
@@ -129,7 +130,9 @@ class Page:
                 )
             _validate_sub_value(key, sub_key, sub_value, config)
 
+
 # Internal helpers
+
 
 def _build_valid_keys(config: dict[str, Any]) -> set[str]:
     valid_keys = set(config.keys()) - {"format"}
@@ -217,7 +220,7 @@ def _resolve_content(content: Any, element_key: str = "?", page_name: str = "?")
             detail_line = ""
             if detail:
                 k, v = next(iter(detail.items()))
-                detail_line = f"\n    {_Y}{k}{_R}: {_Y}{_B}\"{v}\"{_R}"
+                detail_line = f'\n    {_Y}{k}{_R}: {_Y}{_B}"{v}"{_R}'
 
             error_msg = (
                 f"\n{_B}Script execution Traceback:{_R}\n"

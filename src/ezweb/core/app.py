@@ -21,6 +21,7 @@ def _uvicorn_delegate(self, record):
     if logger.level == logging.NOTSET or record.levelno >= logger.level:
         self._delegate_original(record)
 
+
 uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.handlers.clear()
 object.__setattr__(uvicorn_logger, "_delegate_original", uvicorn_logger.handle)
@@ -28,8 +29,12 @@ uvicorn_logger.handle = _uvicorn_delegate.__get__(uvicorn_logger, type(uvicorn_l
 
 uvicorn_access_logger = logging.getLogger("uvicorn.access")
 uvicorn_access_logger.handlers.clear()
-object.__setattr__(uvicorn_access_logger, "_delegate_original", uvicorn_access_logger.handle)
-uvicorn_access_logger.handle = _uvicorn_delegate.__get__(uvicorn_access_logger, type(uvicorn_access_logger))  # type: ignore[method-assign]
+object.__setattr__(
+    uvicorn_access_logger, "_delegate_original", uvicorn_access_logger.handle
+)
+uvicorn_access_logger.handle = _uvicorn_delegate.__get__(
+    uvicorn_access_logger, type(uvicorn_access_logger)
+)  # type: ignore[method-assign]
 
 # Set up Jinja2 environment for template rendering
 _templates_dir = Path(__file__).resolve().parent.parent / "templates"
@@ -114,8 +119,7 @@ class App:
                 page_html = route.page.html
                 html_content = (
                     "".join(page_html)
-                    if hasattr(page_html, "__iter__")
-                    and not isinstance(page_html, str)
+                    if hasattr(page_html, "__iter__") and not isinstance(page_html, str)
                     else page_html
                 )
                 return HTMLResponse(content=html_content)
@@ -154,7 +158,9 @@ class App:
         return self._mode
 
     def run(self, host: str = "127.0.0.1", port: int = 8000):
-        self._log(logging.INFO, f"Starting server in {self._mode} mode on {host}:{port}")
+        self._log(
+            logging.INFO, f"Starting server in {self._mode} mode on {host}:{port}"
+        )
         uvicorn.run(
             self._app,
             host=host,
