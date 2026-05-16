@@ -110,6 +110,7 @@ class App:
                 self._log(
                     logging.INFO, f"{client_host} -> {route.path} -> {route.name}"
                 )
+                route.page._name = route.name
                 page_html = route.page.html
                 html_content = (
                     "".join(page_html)

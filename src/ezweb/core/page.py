@@ -15,6 +15,14 @@ from .script import ScriptInterpreter
 
 logger = logging.getLogger("ezweb.core.app")
 
+_B = "\033[1m"
+_R = "\033[0m"
+_C = "\033[36m"
+_Y = "\033[33m"
+_E = "\033[31m"
+_W = "\033[37m"
+_D = "\033[2m"
+
 __all__ = ["Page"]
 
 _TITLE_LEVELS = range(1, 7)
@@ -71,6 +79,7 @@ class Page:
     def __init__(self, structure: dict[str, Any]) -> None:
         self._validate_structure(structure)
         self.structure: dict[str, Any] = structure
+        self._name: str = ""
 
     # Public API
 
@@ -82,7 +91,8 @@ class Page:
     @property
     def html(self) -> str:
         """Return the page rendered as an HTML string."""
-        children = [_render_element(key, value.copy()) for key, value in self.structure.items()]
+        name = self._name or "?"
+        children = [_render_element(key, value.copy(), name) for key, value in self.structure.items()]
         return to_xml(Html(*children), indent=False)
 
     def __repr__(self) -> str:
@@ -183,7 +193,7 @@ def _validate_content_dict(key: str, value: dict[str, Any], element: str) -> Non
             )
 
 
-def _resolve_content(content: Any) -> str:
+def _resolve_content(content: Any, element_key: str = "?", page_name: str = "?") -> str:
     """Resolve content from a string or content-dict to a final string."""
     if isinstance(content, str):
         return content
@@ -197,17 +207,35 @@ def _resolve_content(content: Any) -> str:
         try:
             result = interpreter.execute(content["data"])
         except Exception as e:
-            logger.error("Script execution failed: %s", e)
+            script_path = interpreter.path
+            trail = f" > {element_key} > content > data"
+            if script_path:
+                trail += f" > {' > '.join(script_path)}"
+            full_path = f"{_B}{page_name}{_R} > {_C}{trail.lstrip(' > ')}{_R}"
+
+            detail = getattr(e, "detail", None)
+            detail_line = ""
+            if detail:
+                k, v = next(iter(detail.items()))
+                detail_line = f"\n    {_Y}{k}{_R}: {_Y}{_B}\"{v}\"{_R}"
+
+            error_msg = (
+                f"\n{_B}Script execution Traceback:{_R}\n"
+                f"  {_C}{full_path}{_R}"
+                f"{detail_line}\n"
+                f"\n{_E}{_B}Error:{_R} {_E}{e}{_R}"
+            )
+            logger.error(error_msg)
             return ""
         return str(result) if result is not None else ""
     return ""
 
 
-def _render_element(key: str, value: dict[str, Any]):
+def _render_element(key: str, value: dict[str, Any], page_name: str = "?"):
     config = _ELEMENTS[key]
     if config.get("content", {}).get("mode") == "level":
-        resolved = _resolve_content(value.get("content", ""))
+        resolved = _resolve_content(value.get("content", ""), key, page_name)
         return config["format"][value["level"]](resolved)
     content = value.pop("content", "")
-    resolved = _resolve_content(content)
+    resolved = _resolve_content(content, key, page_name)
     return config["format"](resolved, **value)

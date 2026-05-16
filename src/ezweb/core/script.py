@@ -53,6 +53,10 @@ from typing import Any
 class ScriptError(Exception):
     """Raised when a script operation fails."""
 
+    def __init__(self, message: str, detail: dict[str, str] | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail
+
 
 def _is_command_dict(value: dict[str, Any], command_keys: frozenset[str]) -> bool:
     return bool(command_keys & value.keys())
@@ -75,6 +79,11 @@ class ScriptInterpreter:
     def __init__(self, base_path: str | Path | None = None) -> None:
         self._variables: dict[str, Any] = {}
         self._base_path = Path(base_path) if base_path else Path.cwd()
+        self._path: list[str] = []
+
+    @property
+    def path(self) -> list[str]:
+        return list(self._path)
 
     # Public API
 
@@ -86,10 +95,18 @@ class ScriptInterpreter:
         result = None
         for key in list(script_data.keys()):
             if key == "return":
-                action = script_data[key]
-                if not isinstance(action, dict):
-                    raise ScriptError("'return' action must be a dict")
-                return self._eval(action.get("data"))
+                self._path.append("return")
+                ok = False
+                try:
+                    action = script_data[key]
+                    if not isinstance(action, dict):
+                        raise ScriptError("'return' action must be a dict")
+                    result = self._eval(action.get("data"))
+                    ok = True
+                    return result
+                finally:
+                    if ok:
+                        self._path.pop()
 
             result = self._dispatch(key, script_data[key])
 
@@ -114,10 +131,8 @@ class ScriptInterpreter:
 
     def _dispatch(self, cmd: str, action: Any) -> Any:
         """Route a command name to its implementation."""
-        if cmd == "variable":
-            return self._do_variable({"variable": action})
-
         _dispatch_map = {
+            "variable":       self._do_variable,
             "read_file":      self._do_read_file,
             "write_file":     self._do_write_file,
             "delete_file":    self._do_delete_file,
@@ -143,10 +158,23 @@ class ScriptInterpreter:
             "timestamp": self._do_timestamp,
             "if":        self._do_if,
         }
+
+        if cmd == "variable":
+            action = {"variable": action}
+
         handler = _dispatch_map.get(cmd)
         if handler is None:
             raise ScriptError(f"Unknown command {cmd!r}")
-        return handler(action)
+
+        self._path.append(cmd)
+        ok = False
+        try:
+            result = handler(action)
+            ok = True
+            return result
+        finally:
+            if ok:
+                self._path.pop()
     
     # Helper: optional save
 
@@ -183,9 +211,9 @@ class ScriptInterpreter:
         try:
             content = full_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            raise ScriptError(f"File not found: {full_path}")
+            raise ScriptError(f"File not found: {full_path}", detail={"file": str(action.get("file"))})
         except OSError as e:
-            raise ScriptError(f"Failed to read '{full_path}': {e}")
+            raise ScriptError(f"Failed to read '{full_path}': {e}", detail={"file": str(action.get("file"))})
         self._maybe_save(action, content)
         return content
 
@@ -197,7 +225,7 @@ class ScriptInterpreter:
         try:
             full_path.write_text(str(content), encoding="utf-8")
         except OSError as e:
-            raise ScriptError(f"Failed to write '{full_path}': {e}")
+            raise ScriptError(f"Failed to write '{full_path}': {e}", detail={"file": str(action.get("file"))})
         result = {"file": str(full_path), "written": True}
         self._maybe_save(action, result)
         return result
@@ -228,7 +256,7 @@ class ScriptInterpreter:
             raise ScriptError("'variable' requires a 'variable' key with the variable name")
         var_name = self._require_str(var_name, "Variable name")
         if var_name not in self._variables:
-            raise ScriptError(f"Variable '{var_name}' is not defined")
+            raise ScriptError(f"Variable '{var_name}' is not defined", detail={"variable": var_name})
         return self._variables[var_name]
     
     # JSON operations
@@ -247,7 +275,7 @@ class ScriptInterpreter:
             try:
                 parsed = json.loads(raw)
             except json.JSONDecodeError as e:
-                raise ScriptError(f"Failed to parse JSON: {e}")
+                raise ScriptError(f"Failed to parse JSON: {e}", detail={"key": key})
         elif isinstance(raw, dict):
             parsed = raw
         else:
@@ -257,7 +285,7 @@ class ScriptInterpreter:
             )
 
         if key not in parsed:
-            raise ScriptError(f"Key '{key}' not found in JSON data")
+            raise ScriptError(f"Key '{key}' not found in JSON data", detail={"key": key})
         result = parsed[key]
         self._maybe_save(action, result)
         return result
