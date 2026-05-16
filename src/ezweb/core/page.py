@@ -147,24 +147,11 @@ def _validate_sub_value(
     value: Any,
     config: dict[str, Any],
 ) -> None:
-    if key == "level":
-        if not isinstance(value, int):
-            raise ValueError(
-                f"Sub-element 'level' in {element!r} must be an integer, "
-                f"got {type(value).__name__}"
-            )
-        if value not in config["content"]["range"]:
-            raise ValueError(
-                f"Invalid level {value!r} in {element!r}. "
-                f"Must be in {list(config['content']['range'])}"
-            )
-        return
-
     if isinstance(value, str):
         return
 
     if isinstance(value, dict) and "type" in value and "data" in value:
-        _validate_content_dict(key, value, element)
+        _validate_content_dict(key, value, element, config)
         return
 
     raise ValueError(
@@ -174,12 +161,19 @@ def _validate_sub_value(
     )
 
 
-def _validate_content_dict(key: str, value: dict[str, Any], element: str) -> None:
+def _validate_content_dict(
+    key: str, value: dict[str, Any], element: str, config: dict[str, Any] | None = None
+) -> None:
     content_type = value.get("type")
-    if content_type not in ("string", "script"):
+    if content_type not in ("string", "script", "int"):
         raise ValueError(
             f"Sub-element {key!r} in {element!r} has invalid 'type' {content_type!r}. "
-            f"Must be 'string' or 'script'"
+            f"Must be 'string', 'script', or 'int'"
+        )
+    if key == "level" and content_type != "int":
+        raise ValueError(
+            f"Sub-element 'level' in {element!r} must have type 'int', "
+            f"got {content_type!r}"
         )
     data = value.get("data")
     if content_type == "string":
@@ -194,6 +188,19 @@ def _validate_content_dict(key: str, value: dict[str, Any], element: str) -> Non
                 f"Sub-element {key!r} in {element!r} with type 'script' "
                 f"requires 'data' to be a dict, got {type(data).__name__}"
             )
+    elif content_type == "int":
+        if not isinstance(data, int):
+            raise ValueError(
+                f"Sub-element {key!r} in {element!r} with type 'int' "
+                f"requires 'data' to be an int, got {type(data).__name__}"
+            )
+        if key == "level" and config is not None:
+            level_range = config.get("content", {}).get("range")
+            if level_range is not None and data not in level_range:
+                raise ValueError(
+                    f"Invalid level {data!r} in {element!r}. "
+                    f"Must be in {list(level_range)}"
+                )
 
 
 def _resolve_content(content: Any, element_key: str = "?", page_name: str = "?") -> str:
@@ -238,7 +245,7 @@ def _render_element(key: str, value: dict[str, Any], page_name: str = "?"):
     config = _ELEMENTS[key]
     if config.get("content", {}).get("mode") == "level":
         resolved = _resolve_content(value.get("content", ""), key, page_name)
-        return config["format"][value["level"]](resolved)
+        return config["format"][value["level"]["data"]](resolved)
     content = value.pop("content", "")
     resolved = _resolve_content(content, key, page_name)
     return config["format"](resolved, **value)
