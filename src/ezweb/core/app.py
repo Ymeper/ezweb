@@ -1,3 +1,4 @@
+import json
 from fastapi import Request
 from pathlib import Path
 import uvicorn
@@ -12,6 +13,7 @@ from starlette.applications import Starlette
 from typing import Literal, List, Optional
 from dataclasses import dataclass
 from .page import Page
+from .script import ScriptInterpreter, ScriptError
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +82,8 @@ class PageRoute:
 
 class App:
     def __init__(self, logger: Optional[logging.Logger] = logger):
-        self._mode: Literal["decoupled", "monolithic"] = "decoupled"
         self._pages: List[PageRoute] = []
+        self._api_handlers: dict[str, dict] = {}
         self._logger = logger
         self._app = Starlette(
             routes=[
@@ -105,7 +107,7 @@ class App:
         if self._logger is not None:
             self._logger.log(level, msg, *args)
 
-    def _catch_all(self, request: Request):
+    async def _catch_all(self, request: Request):
         client_host = request.client.host if request.client else "unknown"
         if request.method == "GET":
             if request.url.path in [route.path for route in self._pages]:
@@ -134,33 +136,54 @@ class App:
                     ),
                     status_code=404,
                 )
+        elif request.method == "POST":
+            path = request.url.path
+            script_data = self._api_handlers.get(path)
+            if script_data is None:
+                self._log(
+                    logging.INFO,
+                    f"{client_host} -> {path} -> API Not Found",
+                )
+                return JSONResponse({"error": "endpoint not found"}, status_code=404)
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            self._log(logging.INFO, f"{client_host} -> POST {path}")
+            interpreter = ScriptInterpreter(
+                initial_variables={"$body": body},
+            )
+            try:
+                result = interpreter.execute(script_data)
+            except ScriptError as e:
+                detail = getattr(e, "detail", {})
+                return JSONResponse(
+                    {"error": str(e), "detail": detail}, status_code=500
+                )
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+            return JSONResponse(result if result is not None else {"ok": True})
         else:
             pass
 
     def add_page(self, route: PageRoute):
         self._pages.append(route)
 
+    def add_api(self, path: str, script: dict):
+        self._api_handlers[path] = script
+
     def remove_page(self, route: PageRoute):
         self._pages.remove(route)
+
+    def remove_api(self, path: str):
+        self._api_handlers.pop(path, None)
 
     @property
     def pages(self) -> List[PageRoute]:
         return self._pages
 
-    def set_mode(self, mode: Literal["decoupled", "monolithic"]):
-        if mode not in ["decoupled", "monolithic"]:
-            raise ValueError("Invalid mode. Mode must be 'decoupled' or 'monolithic'.")
-        self._mode = mode
-        return self._mode
-
-    @property
-    def mode(self) -> Literal["decoupled", "monolithic"]:
-        return self._mode
-
     def run(self, host: str = "127.0.0.1", port: int = 8000):
-        self._log(
-            logging.INFO, f"Starting server in {self._mode} mode on {host}:{port}"
-        )
+        self._log(logging.INFO, f"Starting server on {host}:{port}")
         uvicorn.run(
             self._app,
             host=host,

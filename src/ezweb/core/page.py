@@ -9,7 +9,18 @@ import json
 import logging
 from typing import Any
 
-from ..vendor.fasthtml.components import H1, H2, H3, H4, H5, H6, Footer, P  # type: ignore[attr-defined]
+from ..vendor.fasthtml.components import (
+    H1,
+    H2,
+    H3,
+    H4,
+    H5,
+    H6,
+    Button,
+    Footer,
+    Input,
+    P,
+)  # type: ignore[attr-defined]
 from ..vendor.fasthtml.core import Html, to_xml
 from .script import ScriptInterpreter
 
@@ -58,6 +69,28 @@ _ELEMENTS: dict[str, dict[str, Any]] = {
         },
         "format": Footer,
     },
+    "input": {
+        "type": "dict",
+        "attrs": {
+            "label": {"attr": "aria-label"},
+            "input_type": {"attr": "type", "default": "text"},
+            "id": {},
+            "name": {},
+            "value": {"default": ""},
+            "placeholder": {"default": ""},
+            "on_change": {"attr": "onchange"},
+        },
+        "format": Input,
+    },
+    "button": {
+        "type": "dict",
+        "attrs": {
+            "id": {},
+            "label": {"is_content": True, "default": ""},
+            "on_click": {"attr": "onclick"},
+        },
+        "format": Button,
+    },
 }
 
 
@@ -92,10 +125,13 @@ class Page:
     def html(self) -> str:
         """Return the page rendered as an HTML string."""
         name = self._name or "?"
-        children = [
-            _render_element(key, value.copy(), name)
-            for key, value in self.structure.items()
-        ]
+        children = []
+        for key, value in self.structure.items():
+            if isinstance(value, list):
+                for item in value:
+                    children.append(_render_element(key, item.copy(), name))
+            else:
+                children.append(_render_element(key, value.copy(), name))
         return to_xml(Html(*children), indent=False)
 
     def __repr__(self) -> str:
@@ -106,11 +142,21 @@ class Page:
     def _validate_structure(self, structure: dict[str, Any]) -> None:
         for key, value in structure.items():
             self._validate_element_key(key)
-            if not isinstance(value, dict):
+            if isinstance(value, list):
+                for item in value:
+                    if not isinstance(item, dict):
+                        raise ValueError(
+                            f"Element {key!r} list item must be a dictionary, "
+                            f"got {type(item).__name__}"
+                        )
+                    self._validate_element_content(key, item)
+            elif isinstance(value, dict):
+                self._validate_element_content(key, value)
+            else:
                 raise ValueError(
-                    f"Element {key!r} must be a dictionary, got {type(value).__name__}"
+                    f"Element {key!r} must be a dictionary or list of dictionaries, "
+                    f"got {type(value).__name__}"
                 )
-            self._validate_element_content(key, value)
 
     @staticmethod
     def _validate_element_key(key: str) -> None:
@@ -138,6 +184,8 @@ def _build_valid_keys(config: dict[str, Any]) -> set[str]:
     valid_keys = set(config.keys()) - {"format"}
     if config.get("content", {}).get("mode") == "level":
         valid_keys.add("level")
+    for attr_key in config.get("attrs", {}):
+        valid_keys.add(attr_key)
     return valid_keys
 
 
@@ -203,7 +251,13 @@ def _validate_content_dict(
                 )
 
 
-def _resolve_content(content: Any, element_key: str = "?", page_name: str = "?") -> str:
+def _resolve_content(
+    content: Any,
+    element_key: str = "?",
+    page_name: str = "?",
+    initial_variables: dict[str, Any] | None = None,
+    is_event: bool = False,
+) -> str:
     """Resolve content from a string or content-dict to a final string."""
     if isinstance(content, str):
         return content
@@ -213,7 +267,9 @@ def _resolve_content(content: Any, element_key: str = "?", page_name: str = "?")
     if content_type == "string":
         return content.get("data", "")
     if content_type == "script":
-        interpreter = ScriptInterpreter()
+        interpreter = ScriptInterpreter(
+            initial_variables=initial_variables, is_event=is_event
+        )
         try:
             result = interpreter.execute(content["data"])
         except Exception as e:
@@ -246,6 +302,48 @@ def _render_element(key: str, value: dict[str, Any], page_name: str = "?"):
     if config.get("content", {}).get("mode") == "level":
         resolved = _resolve_content(value.get("content", ""), key, page_name)
         return config["format"][value["level"]["data"]](resolved)
+
+    if "attrs" in config:
+        attrs = {}
+        content_value = ""
+
+        def is_content_attr(attr_key: str) -> bool:
+            return bool(config["attrs"].get(attr_key, {}).get("is_content", False))
+
+        def is_event_attr(attr_key: str) -> bool:
+            return attr_key.startswith("on_")
+
+        def is_regular_attr(attr_key: str) -> bool:
+            return not is_event_attr(attr_key) and not is_content_attr(attr_key)
+
+        for attr_key in config["attrs"]:
+            if is_content_attr(attr_key) and attr_key in value:
+                content_value = _resolve_content(value[attr_key], key, page_name)
+
+        self_ctx = {}
+        for attr_key, attr_cfg in config["attrs"].items():
+            if is_regular_attr(attr_key) and attr_key in value:
+                resolved = _resolve_content(value[attr_key], key, page_name)
+                html_attr = attr_cfg.get("attr", attr_key)
+                attrs[html_attr] = resolved
+                self_ctx[attr_key] = resolved
+                if html_attr != attr_key:
+                    self_ctx[html_attr] = resolved
+
+        for attr_key, attr_cfg in config["attrs"].items():
+            if is_event_attr(attr_key) and attr_key in value:
+                resolved = _resolve_content(
+                    value[attr_key],
+                    key,
+                    page_name,
+                    initial_variables={"self": self_ctx},
+                    is_event=True,
+                )
+                html_attr = attr_cfg.get("attr", attr_key)
+                attrs[html_attr] = resolved
+
+        return config["format"](content_value, **attrs)
+
     content = value.pop("content", "")
     resolved = _resolve_content(content, key, page_name)
     return config["format"](resolved, **value)
